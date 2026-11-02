@@ -2,6 +2,18 @@ spring:
   application:
     name: booking-calendar-api
 
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/booking_calendar?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
   security:
     oauth2:
       client:
@@ -13,3 +25,13 @@ spring:
               - openid
               - profile
               - email
+
+server:
+  servlet:
+    session:
+      timeout: 30m
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}

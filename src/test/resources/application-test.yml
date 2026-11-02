@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:h2:mem:booking_calendar;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
+    username: ${TEST_DB_USERNAME:sa}
+    password: ${TEST_DB_PASSWORD:}
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-google-client
+            client-secret: test-google-secret
