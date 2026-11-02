@@ -5,15 +5,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.transaction.TransactionException;
 
 @RestControllerAdvice
@@ -31,13 +37,25 @@ public class GlobalExceptionHandler {
         return error(ErrorCode.DATA_CONFLICT);
     }
 
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class})
+    public ResponseEntity<ApiResponse<ApiResponse.ErrorDetail>> handleInvalidRequest() {
+        return error(ErrorCode.INVALID_REQUEST);
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<ApiResponse.ErrorDetail>> handleLockConflict() {
+        return error(ErrorCode.RESERVATION_CONFLICT);
+    }
+
     @ExceptionHandler({DataAccessException.class, TransactionException.class})
     public ResponseEntity<ApiResponse<ApiResponse.ErrorDetail>> handleDatabaseException() {
         return error(ErrorCode.DATABASE_UNAVAILABLE);
     }
 
     @ExceptionHandler({ErrorResponseException.class, NoResourceFoundException.class,
-            HttpRequestMethodNotSupportedException.class})
+            HttpRequestMethodNotSupportedException.class, HttpMediaTypeNotSupportedException.class,
+            HttpMediaTypeNotAcceptableException.class})
     public ResponseEntity<ApiResponse<ApiResponse.ErrorDetail>> handleHttpException(Exception exception) {
         ErrorResponse errorResponse = (ErrorResponse) exception;
         HttpStatus status = HttpStatus.valueOf(errorResponse.getStatusCode().value());
