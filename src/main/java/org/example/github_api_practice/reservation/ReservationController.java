@@ -18,9 +18,11 @@ import java.util.List;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final ReservationApplicationService applicationService;
 
-    public ReservationController(ReservationService reservationService) {
+    public ReservationController(ReservationService reservationService, ReservationApplicationService applicationService) {
         this.reservationService = reservationService;
+        this.applicationService = applicationService;
     }
 
     @GetMapping("/api/reservation-slots")
@@ -40,7 +42,7 @@ public class ReservationController {
     public ResponseEntity<ApiResponse<ReservationResponse>> reserve(@AuthenticationPrincipal OidcUser user,
                                                                    @RequestBody CreateReservationRequest request) {
         return ResponseEntity.status(201)
-                .body(ApiResponse.success(reservationService.reserve(user.getSubject(), request.slotId())));
+                .body(ApiResponse.success(applicationService.reserve(user.getSubject(), request.slotId())));
     }
 
     @GetMapping("/api/reservations")
@@ -53,6 +55,6 @@ public class ReservationController {
     @PostMapping("/api/reservations/{reservationId}/cancel")
     public ApiResponse<ReservationResponse> cancel(@AuthenticationPrincipal OidcUser user,
                                                    @PathVariable Long reservationId) {
-        return ApiResponse.success(reservationService.cancel(user.getSubject(), reservationId));
+        return ApiResponse.success(applicationService.cancel(user.getSubject(), reservationId));
     }
 }

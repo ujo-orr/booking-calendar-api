@@ -1,6 +1,10 @@
 package org.example.github_api_practice;
 
 import org.example.github_api_practice.auth.GoogleOidcUserService;
+import org.example.github_api_practice.calendar.CalendarAuthorizationRequestResolver;
+import org.example.github_api_practice.calendar.CalendarConnectionGuard;
+import org.example.github_api_practice.calendar.CalendarOAuthHandlers;
+import org.example.github_api_practice.calendar.CalendarTokenCipher;
 import org.example.github_api_practice.global.error.ErrorCode;
 import org.example.github_api_practice.global.response.ApiResponse;
 import org.example.github_api_practice.global.response.JsonResponseWriter;
@@ -11,7 +15,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
-import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 
@@ -25,8 +30,19 @@ public class SecurityConfig {
     }
 
     @Bean
+    public OAuth2AuthorizedClientRepository authorizedClientRepository() {
+        return new HttpSessionOAuth2AuthorizedClientRepository();
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, GoogleOidcUserService googleOidcUserService,
-                                                   JsonResponseWriter responseWriter) throws Exception {
+                                                   JsonResponseWriter responseWriter,
+                                                   OAuth2AuthorizedClientRepository authorizedClients,
+                                                   CalendarAuthorizationRequestResolver authorizationRequests,
+                                                   CalendarOAuthHandlers oauthHandlers,
+                                                   CalendarTokenCipher tokenCipher) throws Exception {
+        http.addFilterBefore(new CalendarConnectionGuard(tokenCipher, responseWriter),
+                OAuth2AuthorizationRequestRedirectFilter.class);
         http.authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/health", "/api/csrf", "/login", "/error",
                                 "/oauth2/**", "/login/oauth2/**").permitAll()
@@ -38,15 +54,11 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) ->
                                 responseWriter.writeError(response, ErrorCode.ACCESS_DENIED)))
                 .oauth2Login(oauth -> oauth
-                        .authorizedClientRepository(new HttpSessionOAuth2AuthorizedClientRepository())
+                        .authorizedClientRepository(authorizedClients)
+                        .authorizationEndpoint(endpoint -> endpoint.authorizationRequestResolver(authorizationRequests))
                         .userInfoEndpoint(userInfo -> userInfo.oidcUserService(googleOidcUserService))
-                        .defaultSuccessUrl("/api/me", true)
-                        .failureHandler((request, response, exception) -> {
-                            ErrorCode errorCode = exception instanceof OAuth2AuthenticationException oauthException
-                                    && "member_storage_unavailable".equals(oauthException.getError().getErrorCode())
-                                    ? ErrorCode.DATABASE_UNAVAILABLE : ErrorCode.OAUTH_LOGIN_FAILED;
-                            responseWriter.writeError(response, errorCode);
-                        }))
+                        .successHandler(oauthHandlers)
+                        .failureHandler(oauthHandlers))
                 .logout(logout -> logout
                         .logoutUrl("/api/logout")
                         .deleteCookies("JSESSIONID")

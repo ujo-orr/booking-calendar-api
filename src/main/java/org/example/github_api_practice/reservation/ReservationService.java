@@ -1,6 +1,7 @@
 package org.example.github_api_practice.reservation;
 
 import org.example.github_api_practice.global.error.ApiException;
+import org.example.github_api_practice.calendar.CalendarSyncPlanner;
 import org.example.github_api_practice.global.error.ErrorCode;
 import org.example.github_api_practice.member.AuthProvider;
 import org.example.github_api_practice.member.Member;
@@ -30,13 +31,15 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final MemberService memberService;
     private final Clock clock;
+    private final CalendarSyncPlanner calendarSyncPlanner;
 
     public ReservationService(ReservationSlotRepository slotRepository, ReservationRepository reservationRepository,
-                              MemberService memberService, Clock clock) {
+                              MemberService memberService, Clock clock, CalendarSyncPlanner calendarSyncPlanner) {
         this.slotRepository = slotRepository;
         this.reservationRepository = reservationRepository;
         this.memberService = memberService;
         this.clock = clock;
+        this.calendarSyncPlanner = calendarSyncPlanner;
     }
 
     public List<ReservationSlotResponse> availableSlots(LocalDate date) {
@@ -65,6 +68,7 @@ public class ReservationService {
             throw new ApiException(ErrorCode.SLOT_ALREADY_RESERVED);
         }
         Reservation reservation = reservationRepository.saveAndFlush(new Reservation(member, slot, now));
+        calendarSyncPlanner.reserved(reservation.getId(), member.getId());
         return ReservationResponse.from(reservation, BUSINESS_ZONE);
     }
 
@@ -102,6 +106,7 @@ public class ReservationService {
         }
         reservation.cancel(now);
         reservationRepository.flush();
+        calendarSyncPlanner.cancelled(reservationId);
         return ReservationResponse.from(reservation, BUSINESS_ZONE);
     }
 

@@ -20,20 +20,23 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 
-final class MockGoogleServer implements AutoCloseable {
+public final class MockGoogleServer implements AutoCloseable {
 
     private final HttpServer server;
     private final RSAKey signingKey;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
-    volatile String nonce;
-    volatile String email;
-    volatile String fullName;
-    volatile String userInfoSubject;
-    volatile boolean expired;
-    volatile int tokenStatus;
-    volatile String lastTokenForm;
+    public volatile String nonce;
+    public volatile String email;
+    public volatile String fullName;
+    public volatile String userInfoSubject;
+    public volatile boolean expired;
+    public volatile int tokenStatus;
+    public volatile String lastTokenForm;
+    public volatile String subject;
+    public volatile String tokenScope;
+    public volatile String refreshToken;
 
-    MockGoogleServer() {
+    public MockGoogleServer() {
         try {
             signingKey = new RSAKeyGenerator(2048).keyID("phase01-test-key").generate();
             server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -45,9 +48,13 @@ final class MockGoogleServer implements AutoCloseable {
                     write(exchange, tokenStatus, "{\"error\":\"invalid_grant\"}");
                     return;
                 }
-                write(exchange, 200, jsonMapper.writeValueAsString(Map.of(
+                var response = new java.util.LinkedHashMap<String, Object>(Map.of(
                         "access_token", "synthetic-access-token", "token_type", "Bearer", "expires_in", 300,
-                        "scope", "openid profile email", "id_token", idToken())));
+                        "scope", tokenScope, "id_token", idToken()));
+                if (refreshToken != null) {
+                    response.put("refresh_token", refreshToken);
+                }
+                write(exchange, 200, jsonMapper.writeValueAsString(response));
             });
             server.createContext("/userinfo", exchange -> write(exchange, 200,
                     jsonMapper.writeValueAsString(Map.of("sub", userInfoSubject,
@@ -59,7 +66,7 @@ final class MockGoogleServer implements AutoCloseable {
         }
     }
 
-    void reset() {
+    public void reset() {
         nonce = "unset";
         email = "google@example.test";
         fullName = "구글 테스트 회원";
@@ -67,9 +74,12 @@ final class MockGoogleServer implements AutoCloseable {
         expired = false;
         tokenStatus = 200;
         lastTokenForm = null;
+        subject = "google-flow-sub";
+        tokenScope = "openid profile email";
+        refreshToken = null;
     }
 
-    String url(String path) {
+    public String url(String path) {
         return "http://127.0.0.1:" + server.getAddress().getPort() + path;
     }
 
@@ -78,7 +88,7 @@ final class MockGoogleServer implements AutoCloseable {
         var claims = new JWTClaimsSet.Builder()
                 .issuer("https://accounts.google.com")
                 .audience("test-google-client")
-                .subject("google-flow-sub")
+                .subject(subject)
                 .issueTime(Date.from(now.minusSeconds(expired ? 900 : 5)))
                 .expirationTime(Date.from(now.plusSeconds(expired ? -600 : 300)))
                 .claim("nonce", nonce)

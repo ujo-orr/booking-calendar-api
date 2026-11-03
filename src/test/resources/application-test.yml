@@ -10,3 +10,9 @@ spring:
           google:
             client-id: test-google-client
             client-secret: test-google-secret
+          google-calendar:
+            client-id: test-google-client
+            client-secret: test-google-secret
+
+calendar:
+  token-encryption-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=

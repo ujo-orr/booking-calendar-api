@@ -17,6 +17,12 @@ public enum ErrorCode {
     RESERVATION_ALREADY_CANCELLED(HttpStatus.CONFLICT, "이미 취소된 예약입니다."),
     RESERVATION_CANCELLATION_CLOSED(HttpStatus.CONFLICT, "이미 시작된 예약은 취소할 수 없습니다."),
     RESERVATION_CONFLICT(HttpStatus.CONFLICT, "예약 처리 중 충돌했습니다. 다시 시도해 주세요."),
+    CALENDAR_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "캘린더 연동 설정이 필요합니다."),
+    CALENDAR_CONNECTION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "캘린더 연결 정보를 저장할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    CALENDAR_CONNECTION_FAILED(HttpStatus.BAD_REQUEST, "캘린더 연결에 실패했습니다. 다시 동의해 주세요."),
+    CALENDAR_ACCOUNT_MISMATCH(HttpStatus.FORBIDDEN, "로그인한 Google 계정으로 캘린더를 연결해 주세요."),
+    CALENDAR_PERMISSION_REQUIRED(HttpStatus.FORBIDDEN, "캘린더 접근 권한에 동의해 주세요."),
+    CALENDAR_SYNC_FORBIDDEN(HttpStatus.FORBIDDEN, "본인의 캘린더 동기화 정보만 조회할 수 있습니다."),
     DATA_CONFLICT(HttpStatus.CONFLICT, "저장된 데이터와 충돌하는 요청입니다."),
     DATABASE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "회원 저장소를 사용할 수 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버에서 요청을 처리하지 못했습니다.");

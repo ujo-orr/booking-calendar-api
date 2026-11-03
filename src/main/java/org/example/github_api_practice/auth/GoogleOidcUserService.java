@@ -29,10 +29,14 @@ public class GoogleOidcUserService implements OAuth2UserService<OidcUserRequest,
 
     @Override
     public OidcUser loadUser(OidcUserRequest request) throws OAuth2AuthenticationException {
-        if (!"google".equals(request.getClientRegistration().getRegistrationId())) {
+        String registrationId = request.getClientRegistration().getRegistrationId();
+        if (!"google".equals(registrationId) && !"google-calendar".equals(registrationId)) {
             throw new OAuth2AuthenticationException(new OAuth2Error("unsupported_provider"));
         }
         OidcUser user = delegate.loadUser(request);
+        if ("google-calendar".equals(registrationId)) {
+            return user;
+        }
         try {
             memberService.login(AuthProvider.GOOGLE, user.getSubject(), user.getEmail(), user.getFullName());
         } catch (ApiException exception) {

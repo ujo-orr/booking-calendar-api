@@ -25,6 +25,18 @@ spring:
               - openid
               - profile
               - email
+          google-calendar:
+            provider: google
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - openid
+              - profile
+              - email
+              - https://www.googleapis.com/auth/calendar.events.owned
+
+calendar:
+  token-encryption-key: ${CALENDAR_TOKEN_ENCRYPTION_KEY:}
 
 server:
   servlet:
