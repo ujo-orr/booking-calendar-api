@@ -4,7 +4,15 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
-docs/
+/docs/*
+!/docs/images/
+/docs/images/*
+!/docs/images/01-reservation-created.png
+!/docs/images/02-calendar-sync-permission-denied.png
+!/docs/images/03-calendar-sync-retry-accepted.png
+!/docs/images/04-calendar-sync-completed.png
+!/docs/images/05-google-calendar-event.png
+!/docs/images/06-mysql-calendar-sync.png
 
 ### STS ###
 .apt_generated
