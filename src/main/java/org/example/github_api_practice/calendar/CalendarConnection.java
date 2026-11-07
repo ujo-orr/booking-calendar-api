@@ -37,6 +37,13 @@ public class CalendarConnection {
     @Version
     private Long version;
 
+    @Column(name = "refresh_lease_token", length = 36)
+    private String refreshLeaseToken;
+
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
+    @Column(name = "refresh_lease_until")
+    private Instant refreshLeaseUntil;
+
     public CalendarConnection(Long memberId) {
         this.memberId = memberId;
     }
@@ -49,9 +56,28 @@ public class CalendarConnection {
         accessTokenExpiresAt = expiresAt;
         this.scopes = scopes;
         reauthRequired = false;
+        releaseRefresh();
     }
 
     public void requireReauth() {
         reauthRequired = true;
+    }
+
+    public void claimRefresh(String token, Instant until) {
+        refreshLeaseToken = token;
+        refreshLeaseUntil = until;
+    }
+
+    public void releaseRefresh() {
+        refreshLeaseToken = null;
+        refreshLeaseUntil = null;
+    }
+
+    public boolean ownsRefresh(String token) {
+        return token != null && token.equals(refreshLeaseToken);
+    }
+
+    public boolean refreshInProgress(Instant now) {
+        return refreshLeaseUntil != null && refreshLeaseUntil.isAfter(now);
     }
 }

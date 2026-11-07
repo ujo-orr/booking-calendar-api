@@ -32,8 +32,16 @@ public class CalendarSyncPlanner {
     public void cancelled(Long reservationId) {
         ReservationCalendarSync sync = syncs.findById(reservationId).orElseThrow();
         switch (sync.getStatus()) {
-            case NOT_CONNECTED, PENDING_CREATE -> sync.transition(CalendarSyncStatus.DELETED, null, clock.instant());
-            case SYNCED, DELETE_FAILED -> sync.transition(CalendarSyncStatus.PENDING_DELETE, null, clock.instant());
+            case NOT_CONNECTED -> sync.complete(CalendarSyncStatus.DELETED, clock.instant(), null);
+            case PENDING_CREATE -> {
+                if (sync.isCreateDispatched()) {
+                    sync.schedule(CalendarSyncStatus.PENDING_DELETE, clock.instant());
+                } else {
+                    sync.complete(CalendarSyncStatus.DELETED, clock.instant(), null);
+                }
+            }
+            case SYNCED, DELETE_FAILED -> sync.schedule(CalendarSyncStatus.PENDING_DELETE, clock.instant());
+            case CREATE_FAILED -> sync.schedule(CalendarSyncStatus.PENDING_DELETE, clock.instant());
             // 생성 중 취소는 생성 결과를 저장하는 쪽에서 삭제로 연결하는 상태 유지
             default -> { }
         }

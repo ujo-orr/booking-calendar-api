@@ -20,15 +20,17 @@ public class CalendarTokenProvider {
     private final ClientRegistrationRepository registrations;
     private final RestClient client;
     private final Clock clock;
+    private final CalendarHttpErrors errors;
 
     public CalendarTokenProvider(CalendarConnectionStore store, CalendarTokenCipher cipher,
                                  ClientRegistrationRepository registrations,
-                                 @Qualifier("googleTokenRestClient") RestClient client, Clock clock) {
+                                 @Qualifier("googleTokenRestClient") RestClient client, Clock clock, CalendarHttpErrors errors) {
         this.store = store;
         this.cipher = cipher;
         this.registrations = registrations;
         this.client = client;
         this.clock = clock;
+        this.errors = errors;
     }
 
     public String accessToken(Long memberId) {
@@ -41,6 +43,24 @@ public class CalendarTokenProvider {
         }
         if (snapshot.encryptedRefreshToken() == null) {
             store.requireReauth(snapshot);
+            throw new CalendarException(CalendarFailure.REAUTH_REQUIRED);
+        }
+        var work = store.claimRefresh(memberId);
+        snapshot = work.snapshot();
+        if (work.leaseToken() == null) {
+            return cipher.decrypt(snapshot.encryptedAccessToken(), CalendarConnectionStore.context(memberId, "access"));
+        }
+        try {
+            return refresh(snapshot, work.leaseToken());
+        } finally {
+            store.finishRefresh(memberId, work.leaseToken(), false);
+        }
+    }
+
+    private String refresh(CalendarConnectionStore.Snapshot snapshot, String leaseToken) {
+        Long memberId = snapshot.memberId();
+        if (snapshot.encryptedRefreshToken() == null) {
+            store.finishRefresh(memberId, leaseToken, true);
             throw new CalendarException(CalendarFailure.REAUTH_REQUIRED);
         }
         var registration = registrations.findByRegistrationId(CalendarScopes.REGISTRATION_ID);
@@ -63,15 +83,15 @@ public class CalendarTokenProvider {
                 // 원문을 공개하지 않고 분류할 수 없는 오류로 처리
             }
             if ("invalid_grant".equals(error)) {
-                store.requireReauth(snapshot);
+                store.finishRefresh(memberId, leaseToken, true);
                 throw new CalendarException(CalendarFailure.REAUTH_REQUIRED);
             }
             if ("invalid_client".equals(error) || exception.getStatusCode().value() == 401) {
                 throw new CalendarException(CalendarFailure.CONFIGURATION_ERROR);
             }
-            throw new CalendarException(CalendarFailure.PROVIDER_UNAVAILABLE);
+            throw errors.classify(exception);
         } catch (RestClientException exception) {
-            throw new CalendarException(CalendarFailure.PROVIDER_UNAVAILABLE);
+            throw new CalendarException(CalendarFailure.TRANSPORT_ERROR);
         }
         if (response == null || response.accessToken() == null || response.accessToken().isBlank()
                 || response.expiresIn() == null || response.expiresIn() < 1 || response.expiresIn() > 604800
@@ -80,10 +100,10 @@ public class CalendarTokenProvider {
         }
         String scopes = response.scope() == null ? String.join(" ", snapshot.scopes()) : response.scope();
         if (!Arrays.asList(scopes.split(" ")).contains(CalendarScopes.EVENTS_OWNED)) {
-            store.requireReauth(snapshot);
+            store.finishRefresh(memberId, leaseToken, true);
             throw new CalendarException(CalendarFailure.REAUTH_REQUIRED);
         }
-        store.refreshed(snapshot, response.accessToken(), response.refreshToken(),
+        store.refreshed(snapshot, leaseToken, response.accessToken(), response.refreshToken(),
                 clock.instant().plusSeconds(response.expiresIn()), scopes);
         return response.accessToken();
     }

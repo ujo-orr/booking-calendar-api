@@ -108,7 +108,7 @@ class CalendarIntegrationTests {
         var result = application.reserve("calendar-owner", slot().getId());
         var sync = syncs.findById(result.reservationId()).orElseThrow();
         assertThat(sync.getStatus()).isEqualTo(CalendarSyncStatus.SYNCED);
-        assertThat(sync.getGoogleEventId()).isEqualTo("event123");
+        assertThat(sync.getGoogleEventId()).isEqualTo(sync.getEventKey());
         assertThat(google.authorization).isEqualTo("Bearer access-fixture");
         var body = json.readTree(google.createBody);
         assertThat(body.get("start").get("dateTime").asString()).isEqualTo("2030-05-01T10:00:00+09:00");
@@ -124,8 +124,8 @@ class CalendarIntegrationTests {
         application.cancel("calendar-owner", result.reservationId());
         var sync = syncs.findById(result.reservationId()).orElseThrow();
         assertThat(sync.getStatus()).isEqualTo(CalendarSyncStatus.DELETED);
-        assertThat(sync.getGoogleEventId()).isEqualTo("event123");
-        assertThat(google.deletedPath).endsWith("/events/event123");
+        assertThat(sync.getGoogleEventId()).isEqualTo(sync.getEventKey());
+        assertThat(google.deletedPath).endsWith("/events/" + sync.getEventKey());
         assertThat(reservationRepository.findById(result.reservationId()).orElseThrow().getStatus())
                 .isEqualTo(ReservationStatus.CANCELLED);
     }
@@ -259,7 +259,8 @@ class CalendarIntegrationTests {
         google.createStatus = status;
         google.createResponse = "{\"error\":\"private-provider-response\"}";
         var result = application.reserve("calendar-owner", slot().getId());
-        assertFailure(result.reservationId(), CalendarSyncStatus.CREATE_FAILED, CalendarFailure.PROVIDER_UNAVAILABLE);
+        assertFailure(result.reservationId(), CalendarSyncStatus.CREATE_FAILED,
+                status == 429 ? CalendarFailure.RATE_LIMITED : CalendarFailure.PROVIDER_UNAVAILABLE);
         assertThat(reservationRepository.findById(result.reservationId()).orElseThrow().getStatus())
                 .isEqualTo(ReservationStatus.CONFIRMED);
         assertThat(google.creates.get()).isEqualTo(1);
@@ -307,7 +308,8 @@ class CalendarIntegrationTests {
         assertFailure(result.reservationId(), CalendarSyncStatus.DELETE_FAILED, CalendarFailure.PROVIDER_UNAVAILABLE);
         assertThat(reservationRepository.findById(result.reservationId()).orElseThrow().getStatus())
                 .isEqualTo(ReservationStatus.CANCELLED);
-        assertThat(syncs.findById(result.reservationId()).orElseThrow().getGoogleEventId()).isEqualTo("event123");
+        assertThat(syncs.findById(result.reservationId()).orElseThrow().getGoogleEventId())
+                .isEqualTo(syncs.findById(result.reservationId()).orElseThrow().getEventKey());
     }
 
     @Test
@@ -318,7 +320,7 @@ class CalendarIntegrationTests {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             observed.set(true);
             return call.callRealMethod();
-        }).when(calendarClient).create(any(), any(), any(), any());
+        }).when(calendarClient).ensureCreated(any());
         application.reserve("calendar-owner", slot().getId());
         assertThat(observed.get()).isTrue();
     }
@@ -337,7 +339,7 @@ class CalendarIntegrationTests {
     }
 
     @Test
-    void failedSyncIsNotAutomaticallyRetriedInPhaseThree() {
+    void failedSyncWaitsUntilPersistedRetryTime() {
         connect(true);
         google.createStatus = 503;
         var result = application.reserve("calendar-owner", slot().getId());
@@ -379,7 +381,7 @@ class CalendarIntegrationTests {
         mvc.perform(get("/api/reservations/{id}/calendar", result.reservationId())
                         .with(oidcLogin().idToken(t -> t.subject("calendar-owner"))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("SYNCED"))
-                .andExpect(jsonPath("$.data.googleEventId").value("event123"));
+                .andExpect(jsonPath("$.data.googleEventId").value(syncs.findById(result.reservationId()).orElseThrow().getEventKey()));
         mvc.perform(get("/api/reservations/{id}/calendar", result.reservationId())
                         .with(oidcLogin().idToken(t -> t.subject("calendar-other"))))
                 .andExpect(status().isForbidden());

@@ -37,6 +37,18 @@ spring:
 
 calendar:
   token-encryption-key: ${CALENDAR_TOKEN_ENCRYPTION_KEY:}
+  http:
+    connect-timeout: 3s
+    read-timeout: 5s
+  sync:
+    worker-enabled: ${CALENDAR_SYNC_WORKER_ENABLED:true}
+    poll-interval-ms: 5000
+    max-attempts: 5
+    initial-backoff: 30s
+    max-backoff: 15m
+    lease-duration: 60s
+    reconcile-interval: 5m
+    batch-size: 20
 
 server:
   servlet:

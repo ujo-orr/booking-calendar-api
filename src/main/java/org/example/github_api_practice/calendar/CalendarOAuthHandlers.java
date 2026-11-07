@@ -7,6 +7,9 @@ import org.example.github_api_practice.global.error.ErrorCode;
 import org.example.github_api_practice.global.response.JsonResponseWriter;
 import org.example.github_api_practice.member.AuthProvider;
 import org.example.github_api_practice.member.MemberService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,6 +26,7 @@ import java.io.IOException;
 
 @Component
 public class CalendarOAuthHandlers implements AuthenticationSuccessHandler, AuthenticationFailureHandler {
+    private static final Logger log = LoggerFactory.getLogger(CalendarOAuthHandlers.class);
     private final OAuth2AuthorizedClientRepository clients;
     private final CalendarConnectionStore connections;
     private final MemberService members;
@@ -81,6 +85,7 @@ public class CalendarOAuthHandlers implements AuthenticationSuccessHandler, Auth
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
                                         AuthenticationException exception) throws IOException {
         CalendarConnectionAttempt attempt = takeAttempt(request);
+        logAuthenticationFailure(request, exception, attempt != null);
         if (attempt != null) {
             restore(request, response, attempt.originalAuthentication());
             responses.writeError(response, ErrorCode.CALENDAR_CONNECTION_FAILED);
@@ -90,6 +95,29 @@ public class CalendarOAuthHandlers implements AuthenticationSuccessHandler, Auth
                 && "member_storage_unavailable".equals(oauthException.getError().getErrorCode())
                 ? ErrorCode.DATABASE_UNAVAILABLE : ErrorCode.OAUTH_LOGIN_FAILED;
         responses.writeError(response, code);
+    }
+
+    private void logAuthenticationFailure(HttpServletRequest request, AuthenticationException exception,
+                                          boolean calendarConnection) {
+        String error = "authentication_failed";
+        if (exception instanceof OAuth2AuthenticationException oauth) {
+            // Provider error codes and descriptions may contain arbitrary input. Log only known codes.
+            error = switch (oauth.getError().getErrorCode()) {
+                case "authorization_request_not_found", "invalid_state_parameter", "invalid_request",
+                     "access_denied", "invalid_client", "invalid_grant", "invalid_token_response",
+                     "invalid_id_token", "invalid_nonce", "invalid_user_info_response", "invalid_user_info",
+                     "missing_signature_verifier", "unsupported_provider", "member_storage_unavailable",
+                     "server_error", "temporarily_unavailable" -> oauth.getError().getErrorCode();
+                default -> "unrecognized_oauth_error";
+            };
+        }
+        // Do not log the callback URL, query, session ID, exception message or token response.
+        log.warn("OAuth2 authentication failed: flow={}, error={}, exception={}, cause={}, "
+                        + "sessionPresent={}, sessionIdPresent={}, sessionIdValid={}, sessionIdFromCookie={}",
+                calendarConnection ? "calendar" : "login", error, exception.getClass().getSimpleName(),
+                NestedExceptionUtils.getMostSpecificCause(exception).getClass().getSimpleName(),
+                request.getSession(false) != null, request.getRequestedSessionId() != null,
+                request.isRequestedSessionIdValid(), request.isRequestedSessionIdFromCookie());
     }
 
     private CalendarConnectionAttempt takeAttempt(HttpServletRequest request) {

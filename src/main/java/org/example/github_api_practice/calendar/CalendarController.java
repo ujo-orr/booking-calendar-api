@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.http.ResponseEntity;
 
 @RestController
 public class CalendarController {
@@ -37,5 +39,15 @@ public class CalendarController {
         }
         return ApiResponse.success(syncs.status(reservationId,
                 members.findByIdentity(AuthProvider.GOOGLE, user.getSubject()).getId()));
+    }
+
+    @PostMapping("/api/reservations/{reservationId}/calendar/retry")
+    public ResponseEntity<ApiResponse<CalendarSyncResponse>> retry(@AuthenticationPrincipal OidcUser user,
+                                                                  @PathVariable Long reservationId) {
+        if (reservationId < 1) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        Long memberId = members.findByIdentity(AuthProvider.GOOGLE, user.getSubject()).getId();
+        return ResponseEntity.accepted().body(ApiResponse.success(syncs.requestRetry(reservationId, memberId)));
     }
 }

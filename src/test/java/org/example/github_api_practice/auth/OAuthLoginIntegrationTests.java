@@ -6,8 +6,11 @@ import org.example.github_api_practice.member.MemberService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.mock.web.MockHttpSession;
@@ -36,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@ExtendWith(OutputCaptureExtension.class)
 class OAuthLoginIntegrationTests {
 
     static final MockGoogleServer google = new MockGoogleServer();
@@ -103,7 +107,7 @@ class OAuthLoginIntegrationTests {
     }
 
     @Test
-    void deniedConsentReturnsSafeErrorWithoutAuthentication() throws Exception {
+    void deniedConsentReturnsSafeErrorWithoutAuthentication(CapturedOutput output) throws Exception {
         LoginAttempt login = beginLogin();
         mvc.perform(get("/login/oauth2/code/google").session(login.session())
                         .param("state", login.parameters().get("state"))
@@ -111,6 +115,31 @@ class OAuthLoginIntegrationTests {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data.code").value("OAUTH_LOGIN_FAILED"))
                 .andExpect(content().string(not(containsString("private-provider-detail"))));
+        assertNotLoggedIn(login);
+        assertThat(output.getOut()).contains("OAuth2 authentication failed: flow=login, error=access_denied")
+                .doesNotContain("private-provider-detail", "synthetic-code");
+    }
+
+    @Test
+    void callbackWithoutOriginalSessionLogsCauseWithoutLeakingCallback(CapturedOutput output) throws Exception {
+        mvc.perform(get("/login/oauth2/code/google")
+                        .param("state", "private-state").param("code", "private-authorization-code"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data.code").value("OAUTH_LOGIN_FAILED"));
+        assertThat(google.lastTokenForm).isNull();
+        assertThat(output.getOut()).contains("error=authorization_request_not_found", "sessionPresent=false")
+                .doesNotContain("private-state", "private-authorization-code");
+    }
+
+    @Test
+    void providerErrorCodeCannotInjectSecretsIntoLogs(CapturedOutput output) throws Exception {
+        LoginAttempt login = beginLogin();
+        mvc.perform(get("/login/oauth2/code/google").session(login.session())
+                        .param("state", login.parameters().get("state"))
+                        .param("error", "private-provider-error").param("error_description", "private-detail"))
+                .andExpect(status().isUnauthorized());
+        assertThat(output.getOut()).contains("error=unrecognized_oauth_error")
+                .doesNotContain("private-provider-error", "private-detail");
         assertNotLoggedIn(login);
     }
 
@@ -150,12 +179,14 @@ class OAuthLoginIntegrationTests {
     }
 
     @Test
-    void tokenExchangeFailureDoesNotCreateMemberOrSessionAuthentication() throws Exception {
+    void tokenExchangeFailureDoesNotCreateMemberOrSessionAuthentication(CapturedOutput output) throws Exception {
         LoginAttempt login = beginLogin();
         google.tokenStatus = 400;
         callback(login).andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data.code").value("OAUTH_LOGIN_FAILED"));
         assertNotLoggedIn(login);
+        assertThat(output.getOut()).contains("OAuth2 authentication failed: flow=login, error=invalid_grant")
+                .doesNotContain("synthetic-code", "synthetic-access-token");
     }
 
     @Test
